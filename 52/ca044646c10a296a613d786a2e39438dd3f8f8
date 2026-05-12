@@ -1,0 +1,14 @@
+.gitignore
+  h_0e8de12059a157 1-4
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "52ca044646c10a296a613d786a2e39438dd3f8f8",
+  "prompts": {},
+  "humans": {
+    "h_0e8de12059a157": {
+      "author": "Qinghuan <hujieming@inke.cn>"
+    }
+  }
+}
