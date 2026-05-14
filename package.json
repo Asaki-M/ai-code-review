@@ -1,0 +1,28 @@
+{
+  "name": "ai-code-review",
+  "type": "module",
+  "version": "1.0.0",
+  "private": true,
+  "packageManager": "pnpm@10.33.0",
+  "description": "AI code review workspace",
+  "author": "",
+  "license": "ISC",
+  "keywords": [],
+  "scripts": {
+    "build": "tsc -b packages/core apps/api apps/cli",
+    "dev:api": "dotenv -e .env -- pnpm --filter @ai-code-review/api dev",
+    "dev:cli": "dotenv -e .env -- pnpm --filter @ai-code-review/cli dev",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "typecheck": "tsc -b packages/core apps/api apps/cli --pretty",
+    "start:cli": "pnpm --filter @ai-code-review/core build && pnpm --filter @ai-code-review/cli build && dotenv -e .env -- pnpm --filter @ai-code-review/cli start"
+  },
+  "devDependencies": {
+    "@antfu/eslint-config": "^9.0.0",
+    "@types/node": "^22.15.3",
+    "dotenv-cli": "^11.0.0",
+    "eslint": "^10.3.0",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3"
+  }
+}

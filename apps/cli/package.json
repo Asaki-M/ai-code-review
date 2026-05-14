@@ -1,0 +1,19 @@
+{
+  "name": "@ai-code-review/cli",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "bin": {
+    "ai-code-review": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "pnpm --filter @ai-code-review/core build && tsx src/index.ts",
+    "start": "node dist/index.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@ai-code-review/core": "workspace:*",
+    "@inquirer/prompts": "^8.4.3"
+  }
+}
