@@ -1,0 +1,16 @@
+packages/core/src/index.ts
+  h_b690bb793b7533 4,9-36,43-46,54-55,59-68,86-87,95-98,100-105,119-125
+packages/core/package.json
+  h_b690bb793b7533 23
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.8",
+  "base_commit_sha": "bccb29901526bd7152eacefc0e27620abd73fce5",
+  "prompts": {},
+  "humans": {
+    "h_b690bb793b7533": {
+      "author": "Qinghuan <1041220793@qq.com>"
+    }
+  }
+}
