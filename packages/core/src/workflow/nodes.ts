@@ -4,28 +4,34 @@ import type { ModifyResult } from '../schemas/modify.js'
 import type { PushResult } from '../schemas/push.js'
 import type { ReviewInput } from '../schemas/workflow.js'
 import type { ReviewWorkflowState } from './state.js'
-import { collectAgent } from '../agents/collectAgent/index.js'
+import { collectCommitContext } from '../agents/collectAgent/index.js'
 import { judgeAgent } from '../agents/judgeAgent/index.js'
 import { modifyAgent } from '../agents/modifyAgent/index.js'
 import { pushAgent, pushPlannerAgent } from '../agents/pushAgent/index.js'
-import { reviewInstructionAgent } from '../agents/reviewInstructionAgent/index.js'
 import { reviewAgent } from '../agents/reviewAgent/index.js'
+import { reviewInstructionAgent } from '../agents/reviewInstructionAgent/index.js'
 import { createRepositoryGit } from '../utils/git.js'
 import { required } from '../utils/required.js'
 import { buildHumanFeedbackRequest, buildPushFeedbackRequest } from './feedback.js'
 import { normalizePushPlan } from './push.js'
-import { buildModifyInstructionPrompt, buildReviewInstructionPrompt, getLatestUserInstruction, hasNewUserInstruction } from './reviewInstruction.js'
+import { buildModifyInstructionPrompt, getLatestUserInstruction, hasNewUserInstruction } from './reviewInstruction.js'
 
 export async function collect(input: ReviewInput) {
   if (!input.repository) {
     throw new Error('reviewCode requires either diff or repository.')
   }
 
-  const result = await collectAgent.invoke({
-    messages: [{ role: 'user', content: `repoPath: ${input.repository}\nlimit: ${input.commitLimit ?? 5}` }],
+  return collectCommitContext({
+    repoPath: input.repository,
+    limit: input.commitLimit ?? 5,
   })
+}
 
-  return String(result.messages.at(-1)?.content ?? '')
+async function collectWorkingTree(repository: string) {
+  return collectCommitContext({
+    repoPath: repository,
+    includeRecentCommits: false,
+  })
 }
 
 export async function review(commitContext: string, instruction?: string) {
@@ -201,7 +207,7 @@ export async function rereviewCollect(state: ReviewWorkflowState) {
     throw new Error('缺少 repository，无法收集重新审查所需上下文。')
   }
 
-  return buildWorkflowReset(await collect({ repository, commitLimit: state.commitLimit }))
+  return buildWorkflowReset(await collectWorkingTree(repository))
 }
 
 export async function planPush(state: ReviewWorkflowState) {

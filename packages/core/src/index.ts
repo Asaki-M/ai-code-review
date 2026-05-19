@@ -1,4 +1,5 @@
 import type { ReviewInput, ReviewWorkflowResult } from './schemas/workflow.js'
+import { resolve } from 'node:path'
 import { END, START, StateGraph } from '@langchain/langgraph'
 import { required } from './utils/required.js'
 import { collect, commit, humanFeedback, judge, modify, nextAfterCommit, nextAfterHumanFeedback, nextAfterModify, planPush, prepareRetry, push, pushFeedback, rereviewCollect, review, shouldExecutePush } from './workflow/nodes.js'
@@ -81,7 +82,10 @@ export const reviewWorkflow = new StateGraph(State)
   .compile()
 
 export async function reviewCode(input: ReviewInput = {}): Promise<ReviewWorkflowResult> {
-  const result = await reviewWorkflow.invoke(input)
+  const result = await reviewWorkflow.invoke({
+    ...input,
+    repository: input.repository ? resolve(input.repository) : input.repository,
+  })
 
   return {
     commitContext: required(result.commitContext, 'commitContext'),
