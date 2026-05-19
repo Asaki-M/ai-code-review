@@ -1,0 +1,18 @@
+packages/core/src/agents/modifyAgent/index.ts
+  h_b690bb793b7533 43-44,52-55,59-73,76,79,154-158,160-173
+packages/core/src/workflow/reviewInstruction.ts
+  h_b690bb793b7533 1-26
+packages/core/src/agents/verifyAgent/index.ts
+  h_b690bb793b7533 8,56,62,119
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.10",
+  "base_commit_sha": "1c90f5960db4cef1f04a4788476e40c4d1ff163d",
+  "prompts": {},
+  "humans": {
+    "h_b690bb793b7533": {
+      "author": "Qinghuan <1041220793@qq.com>"
+    }
+  }
+}
