@@ -5,9 +5,15 @@ import { createOpencode } from '@opencode-ai/sdk/v2'
 import { createAgent } from 'langchain'
 import { z } from 'zod'
 import { verificationInputSchema, verificationPlanSchema, verificationResultSchema } from '../../schemas/verify.js'
+import { formatOpencodeError, formatSchemaIssues, getTextFromParts, parseJsonResponse } from '../../shared/opencode.js'
 
 const verificationPlanJsonSchema = z.toJSONSchema(verificationPlanSchema)
 const verificationResultJsonSchema = z.toJSONSchema(verificationResultSchema)
+const llm = new ChatVertexAI({
+  model: 'gemini-2.5-pro',
+  temperature: 0,
+  maxRetries: 2,
+})
 
 async function verifyRepository(input: VerificationInput) {
   const { repository } = input
@@ -23,35 +29,48 @@ async function verifyRepository(input: VerificationInput) {
       return JSON.stringify(buildFallbackResult(repository, 'Opencode session 创建失败'))
     }
 
-    const planResponse = (await client.session.prompt({
+    const planPromptResponse = await client.session.prompt({
       directory: repository,
       sessionID: session.id,
-      format: {
-        type: 'json_schema',
-        schema: verificationPlanJsonSchema,
-        retryCount: 2,
-      },
       parts: [
         {
           type: 'text',
           text: buildPlanPrompt(input),
         },
       ],
-    })).data
+    })
 
-    if (!planResponse) {
-      return JSON.stringify(buildFallbackResult(repository, '未收到验证计划结果', session.id))
-    }
-
-    if (planResponse.info.error?.name === 'StructuredOutputError') {
+    if (!planPromptResponse.data) {
       return JSON.stringify(buildFallbackResult(
         repository,
-        `验证计划结构化输出失败：${planResponse.info.error.data.message}`,
+        planPromptResponse.error ? `未收到验证计划结果：${JSON.stringify(planPromptResponse.error)}` : '未收到验证计划结果',
         session.id,
       ))
     }
 
-    const plan = verificationPlanSchema.parse(planResponse.info.structured)
+    const planResponse = planPromptResponse.data
+
+    if (planResponse.info.error) {
+      return JSON.stringify(buildFallbackResult(
+        repository,
+        `验证计划返回错误：${formatOpencodeError(planResponse.info.error)}`,
+        session.id,
+      ))
+    }
+
+    const { validated: validatedPlan } = parseJsonResponse(planResponse.parts, verificationPlanSchema)
+
+    if (!validatedPlan?.success) {
+      return JSON.stringify(buildFallbackResult(
+        repository,
+        validatedPlan
+          ? `验证计划 JSON 不符合 VerificationPlan：${formatSchemaIssues(validatedPlan.error)}`
+          : '验证计划未返回可解析的 JSON 文本',
+        session.id,
+      ))
+    }
+
+    const plan = validatedPlan.data
 
     if (plan.tasks.length === 0) {
       return JSON.stringify({
@@ -65,39 +84,52 @@ async function verifyRepository(input: VerificationInput) {
       })
     }
 
-    const executeResponse = (await client.session.prompt({
+    const executePromptResponse = await client.session.prompt({
       directory: repository,
       sessionID: session.id,
-      format: {
-        type: 'json_schema',
-        schema: verificationResultJsonSchema,
-        retryCount: 2,
-      },
       parts: [
         {
           type: 'text',
           text: buildExecutePrompt(plan, input),
         },
       ],
-    })).data
+    })
 
-    if (!executeResponse) {
-      return JSON.stringify(buildFallbackResult(repository, '未收到验证执行结果', session.id, plan))
-    }
-
-    if (executeResponse.info.error?.name === 'StructuredOutputError') {
+    if (!executePromptResponse.data) {
       return JSON.stringify(buildFallbackResult(
         repository,
-        `验证执行结构化输出失败：${executeResponse.info.error.data.message}`,
+        executePromptResponse.error ? `未收到验证执行结果：${JSON.stringify(executePromptResponse.error)}` : '未收到验证执行结果',
         session.id,
         plan,
       ))
     }
 
-    const result = verificationResultSchema.parse(executeResponse.info.structured)
+    const executeResponse = executePromptResponse.data
+
+    if (executeResponse.info.error) {
+      return JSON.stringify(buildFallbackResult(
+        repository,
+        `验证执行返回错误：${formatOpencodeError(executeResponse.info.error)}`,
+        session.id,
+        plan,
+      ))
+    }
+
+    const { validated: validatedResult } = parseJsonResponse(executeResponse.parts, verificationResultSchema)
+
+    if (!validatedResult?.success) {
+      return JSON.stringify(buildFallbackResult(
+        repository,
+        validatedResult
+          ? `验证执行 JSON 不符合 VerificationResult：${formatSchemaIssues(validatedResult.error)}`
+          : '验证执行未返回可解析的 JSON 文本',
+        session.id,
+        plan,
+      ))
+    }
 
     return JSON.stringify({
-      ...result,
+      ...validatedResult.data,
       plan,
       sessionId: session.id,
       response: getTextFromParts(executeResponse.parts),
@@ -120,12 +152,6 @@ const verifyRepositoryTool = tool(verifyRepository, {
   schema: verificationInputSchema,
 })
 
-const llm = new ChatVertexAI({
-  model: 'gemini-2.5-pro',
-  temperature: 0,
-  maxRetries: 2,
-})
-
 export const verifyAgent = createAgent({
   model: llm,
   tools: [verifyRepositoryTool],
@@ -145,7 +171,7 @@ export const verifyAgent = createAgent({
 
 function buildPlanPrompt({ instruction }: VerificationInput) {
   return [
-    '你是代码验证规划助手，请检查当前仓库中可用的验证命令，并生成结构化验证计划。',
+    '你是代码验证规划助手，请检查当前仓库中可用的验证命令，并生成 JSON 文本形式的验证计划。',
     '',
     '要求：',
     '- 优先从 package.json、Makefile、justfile、go.mod、Cargo.toml、pyproject.toml 等实际配置中查找命令。',
@@ -155,15 +181,19 @@ function buildPlanPrompt({ instruction }: VerificationInput) {
     '- cwd 使用实际应执行命令的目录。',
     '- 如果仓库没有某类任务，不要臆造命令。',
     '- 如果完全找不到可执行验证命令，返回空 tasks。',
+    '- 不要使用结构化输出能力，直接返回 JSON 文本，建议放在 ```json 代码块里。',
     '',
     '用户补充说明：',
     instruction ?? '(none)',
+    '',
+    'JSON Schema 参考：',
+    JSON.stringify(verificationPlanJsonSchema, null, 2),
   ].join('\n')
 }
 
 function buildExecutePrompt(plan: VerificationPlan, { instruction }: VerificationInput) {
   return [
-    '你是代码验证执行助手，请按给定验证计划在当前仓库执行命令，并返回结构化结果。',
+    '你是代码验证执行助手，请按给定验证计划在当前仓库执行命令，并返回 JSON 文本形式的验证结果。',
     '',
     '执行要求：',
     '- 严格按 plan.cwd 和每个 task.command 执行。',
@@ -173,12 +203,16 @@ function buildExecutePrompt(plan: VerificationPlan, { instruction }: Verificatio
     '- ok 表示所有 required 任务都通过；skipped 仅在没有任务执行时为 true。',
     '- plan 字段必须与输入计划一致。',
     '- 不要修改代码或安装新依赖，除非仓库本身已有明确脚本并且执行脚本本身会触发必要准备步骤。',
+    '- 不要使用结构化输出能力，直接返回 JSON 文本，建议放在 ```json 代码块里。',
     '',
     '验证计划：',
     JSON.stringify(plan, null, 2),
     '',
     '用户补充说明：',
     instruction ?? '(none)',
+    '',
+    'JSON Schema 参考：',
+    JSON.stringify(verificationResultJsonSchema, null, 2),
   ].join('\n')
 }
 
@@ -196,13 +230,4 @@ function buildFallbackResult(
     message,
     sessionId,
   }
-}
-
-function getTextFromParts(parts: Array<{ type?: string, text?: string }> | undefined) {
-  const textParts = parts
-    ?.filter(part => part.type === 'text' && typeof part.text === 'string')
-    .map(part => part.text?.trim())
-    .filter(Boolean)
-
-  return textParts?.join('\n').trim()
 }

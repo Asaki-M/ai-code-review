@@ -1,10 +1,10 @@
-import type { BranchSummary, LogResult, RemoteWithRefs, StatusResult } from 'simple-git'
+import type { BranchSummary, LogResult, RemoteWithRefs } from 'simple-git'
 import { tool } from '@langchain/core/tools'
 import { ChatVertexAI } from '@langchain/google-vertexai'
 import { createAgent } from 'langchain'
-import { simpleGit } from 'simple-git'
 import { z } from 'zod'
 import { pushPlanSchema, pushResultSchema } from '../../schemas/push.js'
+import { createRepositoryGit, formatGitStatus } from '../../utils/git.js'
 
 const llm = new ChatVertexAI({
   model: 'gemini-2.5-pro',
@@ -26,7 +26,7 @@ const collectPushContextTool = tool(
 const gitPushTool = tool(
   async ({ repository, remote, source, destination }) => {
     const command = buildPushCommand({ remote, source, destination })
-    const git = simpleGit({ baseDir: repository, maxConcurrentProcesses: 1, trimmed: true })
+    const git = createRepositoryGit(repository)
 
     try {
       const result = await git.push(remote, `${source}:${destination}`)
@@ -106,7 +106,7 @@ export const pushAgent = createAgent({
 })
 
 async function collectPushContext(repository: string) {
-  const git = simpleGit({ baseDir: repository, maxConcurrentProcesses: 1, trimmed: true })
+  const git = createRepositoryGit(repository)
   const [branchSummary, status, remotes, head, upstream, remoteBranches, recentCommits, changedFiles] = await Promise.all([
     safe(() => git.branch()),
     safe(() => git.status()),
@@ -127,7 +127,7 @@ async function collectPushContext(repository: string) {
     `upstream: ${upstream || '(none)'}`,
     '',
     'status:',
-    formatStatus(status),
+    formatGitStatus(status),
     '',
     'remotes:',
     formatRemotes(remotes),
@@ -153,22 +153,6 @@ async function safe<T>(task: () => Promise<T>): Promise<T | undefined> {
   catch {
     return undefined
   }
-}
-
-function formatStatus(status: StatusResult | undefined) {
-  if (!status) {
-    return '(unknown)'
-  }
-
-  const lines = [
-    `branch: ${status.current ?? '(unknown)'}`,
-    `tracking: ${status.tracking ?? '(none)'}`,
-    `ahead: ${status.ahead}`,
-    `behind: ${status.behind}`,
-    ...status.files.map(file => `${file.index}${file.working_dir} ${file.path}`),
-  ]
-
-  return lines.join('\n') || '(clean)'
 }
 
 function formatRemotes(remotes: RemoteWithRefs[] | undefined) {

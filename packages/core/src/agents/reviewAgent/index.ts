@@ -42,6 +42,8 @@ ${reviewSkillCatalog}
 - 如果无法判断领域，至少读取 common skill。
 
 # 输出要求
+- 如果输入中提供了“用户意见指令”，必须把它视为本次审查约束，并在输出 findings 时遵守。
+- 当用户已经明确接受、忽略或暂不处理某些问题时，不要把这些内容再次作为待处理问题输出，除非它们会引入新的严重风险，且必须在 message 中明确说明冲突原因。
 - 必须输出符合 ReviewResult 的结构化结果：summary、severity、findings、decision。
 - severity 只能是 pass、minor、major、critical。
 - decision 只能是 PASS、REJECT。

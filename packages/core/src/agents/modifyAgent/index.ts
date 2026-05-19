@@ -5,8 +5,14 @@ import { createOpencode } from '@opencode-ai/sdk/v2'
 import { createAgent } from 'langchain'
 import { z } from 'zod'
 import { modifyInputSchema, modifyResultSchema } from '../../schemas/modify.js'
+import { formatOpencodeError, formatSchemaIssues, parseJsonResponse } from '../../shared/opencode.js'
 
 const modifyResultJsonSchema = z.toJSONSchema(modifyResultSchema)
+const llm = new ChatVertexAI({
+  model: 'gemini-2.5-pro',
+  temperature: 0,
+  maxRetries: 2,
+})
 
 async function modifyCommitContext(input: ModifyInput) {
   const { repository } = input
@@ -19,62 +25,67 @@ async function modifyCommitContext(input: ModifyInput) {
     })).data
 
     if (!session || !session.id) {
-      return JSON.stringify({
-        success: false,
-        skipped: true,
-        message: 'Opencode session 创建失败',
-      } satisfies ModifyResult)
+      return JSON.stringify(buildFallbackResult('Opencode session 创建失败'))
     }
 
-    const result = (await client.session.prompt({
+    const promptResponse = await client.session.prompt({
       directory: repository,
       sessionID: session.id,
-      format: {
-        type: 'json_schema',
-        schema: modifyResultJsonSchema,
-        retryCount: 2,
-      },
       parts: [
         {
           type: 'text',
           text: buildModifyPrompt(input),
         },
       ],
+    })
+
+    if (!promptResponse.data) {
+      return JSON.stringify(buildFallbackResult(
+        promptResponse.error ? `Opencode 未返回 data：${JSON.stringify(promptResponse.error)}` : 'Opencode 未返回 data',
+        session.id,
+      ))
+    }
+
+    const result = promptResponse.data
+
+    if (result.info.error) {
+      return JSON.stringify(buildFallbackResult(
+        `Opencode prompt 返回错误：${formatOpencodeError(result.info.error)}`,
+        session.id,
+      ))
+    }
+
+    const diff = (await client.session.diff({
+      sessionID: session.id,
+      directory: repository,
+      messageID: result.info.id,
     })).data
 
-    if (!result) {
-      return JSON.stringify({
-        success: false,
-        skipped: true,
-        sessionId: session.id,
-        message: '未收到 Opencode 的修改结果',
-      } satisfies ModifyResult)
-    }
+    const { response, validated } = parseJsonResponse(result.parts, modifyResultSchema)
+    const changedFiles = summarizeDiff(diff)
 
-    if (result.info.error?.name === 'StructuredOutputError') {
-      return JSON.stringify({
-        success: false,
-        skipped: true,
-        sessionId: session.id,
-        response: getTextFromParts(result.parts),
-        message: `结构化输出失败：${result.info.error.data.message}`,
-      } satisfies ModifyResult)
+    if (!validated?.success) {
+      return JSON.stringify(buildFallbackResult(
+        validated
+          ? `Opencode 返回的 JSON 不符合 ModifyResult：${formatSchemaIssues(validated.error)}`
+          : 'Opencode 未返回可解析的 JSON 文本',
+        session.id,
+        response,
+        changedFiles,
+      ))
     }
-
-    const structured = modifyResultSchema.parse(result.info.structured)
 
     return JSON.stringify({
-      ...structured,
+      ...validated.data,
       sessionId: session.id,
-      response: getTextFromParts(result.parts),
+      response,
+      changedFiles: validated.data.changedFiles?.length ? validated.data.changedFiles : changedFiles,
     } satisfies ModifyResult)
   }
   catch (error) {
-    return JSON.stringify({
-      success: false,
-      skipped: true,
-      message: `修改提交内容失败：${error instanceof Error ? error.message : String(error)}`,
-    } satisfies ModifyResult)
+    return JSON.stringify(buildFallbackResult(
+      `修改提交内容失败：${error instanceof Error ? error.message : String(error)}`,
+    ))
   }
   finally {
     server.close()
@@ -85,12 +96,6 @@ const modifyCommitTool = tool(modifyCommitContext, {
   name: 'modifyCommitTool',
   description: '调用 opencode sdk，根据 review 结果自动修改仓库工作区中的代码。',
   schema: modifyInputSchema,
-})
-
-const llm = new ChatVertexAI({
-  model: 'gemini-2.5-pro',
-  temperature: 0,
-  maxRetries: 2,
 })
 
 export const modifyAgent = createAgent({
@@ -119,7 +124,8 @@ function buildModifyPrompt({ review, commitContext, instruction }: ModifyInput) 
     '- 优先修复 findings 中明确的问题。',
     '- 不要执行 git commit、git push 或改写无关文件。',
     '- 如果某个问题信息不足以安全修改，可以跳过并在结果里说明原因。',
-    '- 完成后通过结构化输出返回修改结果；文本回复可简短说明做了什么。',
+    '- 完成后直接返回 JSON 文本，不要使用结构化输出能力，建议放在 ```json 代码块里。',
+    '- 文本回复可简短说明做了什么，但 JSON 必须符合给定 Schema。',
     '',
     'review 结果：',
     JSON.stringify(review, null, 2),
@@ -129,14 +135,40 @@ function buildModifyPrompt({ review, commitContext, instruction }: ModifyInput) 
     '',
     '用户补充说明：',
     instruction ?? '(none)',
+    '',
+    'JSON Schema 参考：',
+    JSON.stringify(modifyResultJsonSchema, null, 2),
   ].join('\n')
 }
 
-function getTextFromParts(parts: Array<{ type?: string, text?: string }> | undefined) {
-  const textParts = parts
-    ?.filter(part => part.type === 'text' && typeof part.text === 'string')
-    .map(part => part.text?.trim())
-    .filter(Boolean)
+function summarizeDiff(diff: Array<{
+  file?: string
+  status?: 'added' | 'deleted' | 'modified'
+  additions: number
+  deletions: number
+}> | undefined) {
+  if (!diff?.length) {
+    return undefined
+  }
 
-  return textParts?.join('\n').trim()
+  return diff.map(change => ({
+    file: change.file ?? '(unknown)',
+    summary: `${change.status ?? 'modified'} (+${change.additions}/-${change.deletions})`,
+  }))
+}
+
+function buildFallbackResult(
+  message: string,
+  sessionId?: string,
+  response?: string,
+  changedFiles?: ModifyResult['changedFiles'],
+): ModifyResult {
+  return {
+    success: false,
+    skipped: true,
+    message,
+    sessionId,
+    response,
+    changedFiles,
+  }
 }

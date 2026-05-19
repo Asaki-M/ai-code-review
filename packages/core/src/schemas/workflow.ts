@@ -1,3 +1,4 @@
+import type { CommitResult } from './commit.js'
 import type { ModifyResult } from './modify.js'
 import type { PushPlan, PushResult } from './push.js'
 import type { JudgeResult, ReviewResult } from './review.js'
@@ -22,6 +23,7 @@ export interface HumanFeedbackRequest {
 export interface HumanFeedbackResponse {
   action: HumanFeedbackResponseAction
   message?: string
+  instruction?: string
   pushOptionId?: string
 }
 
@@ -42,6 +44,7 @@ export interface ReviewWorkflowResult {
   humanFeedback?: HumanFeedbackResponse
   modify?: ModifyResult
   verify?: VerificationResult
+  commit?: CommitResult
   pushFeedbackRequest?: HumanFeedbackRequest
   pushFeedback?: HumanFeedbackResponse
   pushPlan?: PushPlan

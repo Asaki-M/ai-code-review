@@ -1,3 +1,5 @@
+import type { CommitResult } from '../schemas/commit.js'
+import type { WorkflowUserInstruction } from '../schemas/instruction.js'
 import type { ModifyResult } from '../schemas/modify.js'
 import type { PushPlan, PushResult } from '../schemas/push.js'
 import type { JudgeResult, ReviewResult } from '../schemas/review.js'
@@ -12,9 +14,11 @@ export const State = Annotation.Root({
   commitContext: Annotation<string | undefined>,
   review: Annotation<ReviewResult | undefined>,
   judge: Annotation<JudgeResult | undefined>,
+  userInstruction: Annotation<WorkflowUserInstruction | undefined>,
   humanFeedback: Annotation<HumanFeedbackResponse | undefined>,
   modify: Annotation<ModifyResult | undefined>,
   verify: Annotation<VerificationResult | undefined>,
+  commit: Annotation<CommitResult | undefined>,
   pushFeedback: Annotation<HumanFeedbackResponse | undefined>,
   feedbackRequest: Annotation<HumanFeedbackRequest | undefined>,
   pushFeedbackRequest: Annotation<HumanFeedbackRequest | undefined>,

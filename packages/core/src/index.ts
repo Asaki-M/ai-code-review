@@ -1,7 +1,8 @@
 import type { ReviewInput, ReviewWorkflowResult } from './schemas/workflow.js'
 import { END, START, StateGraph } from '@langchain/langgraph'
 import { required } from './utils/required.js'
-import { collect, humanFeedback, judge, modify, nextAfterHumanFeedback, nextAfterModify, nextAfterVerify, planPush, prepareRetry, push, pushFeedback, rereviewCollect, review, shouldExecutePush, verify } from './workflow/nodes.js'
+import { collect, commit, humanFeedback, judge, modify, nextAfterCommit, nextAfterHumanFeedback, nextAfterModify, planPush, prepareRetry, push, pushFeedback, rereviewCollect, review, shouldExecutePush } from './workflow/nodes.js'
+import { buildReviewInstructionPrompt } from './workflow/reviewInstruction.js'
 import { State } from './workflow/state.js'
 
 /**
@@ -17,31 +18,36 @@ import { State } from './workflow/state.js'
  *   - REJECT: 展示问题列表，请用户选择自动修改、强制推送或取消
  * - modifyStep:
  *   当用户选择 auto_modify 时，modify agent 根据 review 结果修改代码
- * - verifyStep:
- *   modify 成功后，verify agent 自动识别并执行 lint / typecheck / test / build
  * - prepareRetryStep:
- *   如果 modify 或 verify 失败，刷新最新 commit context，并回到 humanFeedbackStep 再次让用户决策
+ *   如果 modify 失败，刷新最新 commit context，并回到 humanFeedbackStep 再次让用户决策
  * - rereviewCollectStep:
- *   如果 verify 通过，重新收集修改后的 commit context，再次进入 reviewStep / judgeStep 做复审
+ *   modify 成功后，重新收集修改后的 commit context，再次进入 reviewStep / judgeStep 做复审
  * - pushPlanStep:
  *   当用户确认可以推送时，分析并生成候选 git push 方案
  * - pushFeedbackStep:
  *   让用户从 push 方案中选择一种实际执行方式
+ * - commitStep:
+ *   当用户已选定推送方案时，自动执行 git add / git commit，确保后续推送包含本次修改
  * - pushStep:
  *   按用户选择执行 git push
  *
  * 整体流程是一个带回环的审查工作流：
- * 初审未通过时可以自动修改 -> 自动验证 -> 自动复审；
- * 任一环节失败则回到人工决策；
+ * 初审未通过时可以自动修改 -> 自动复审；
+ * 自动修改失败时回到人工决策；
  * 最终只有在审查通过且用户确认后才会进入推送阶段。
  */
 export const reviewWorkflow = new StateGraph(State)
   .addNode('collect', async state => ({ commitContext: state.diff ?? await collect(state) }))
-  .addNode('reviewStep', async state => ({ review: await review(required(state.commitContext, 'commitContext')) }))
+  .addNode('reviewStep', async state => ({
+    review: await review(
+      required(state.commitContext, 'commitContext'),
+      buildReviewInstructionPrompt(state.userInstruction),
+    ),
+  }))
   .addNode('judgeStep', async state => ({ judge: await judge(state.review) }))
   .addNode('humanFeedbackStep', async state => humanFeedback(state))
   .addNode('modifyStep', async state => ({ modify: await modify(state) }))
-  .addNode('verifyStep', async state => ({ verify: await verify(state) }))
+  .addNode('commitStep', async state => ({ commit: await commit(state) }))
   .addNode('prepareRetryStep', async state => prepareRetry(state))
   .addNode('rereviewCollectStep', async state => rereviewCollect(state))
   .addNode('pushPlanStep', async state => ({ pushPlan: await planPush(state) }))
@@ -57,10 +63,6 @@ export const reviewWorkflow = new StateGraph(State)
     end: END,
   })
   .addConditionalEdges('modifyStep', nextAfterModify, {
-    verify: 'verifyStep',
-    retry: 'prepareRetryStep',
-  })
-  .addConditionalEdges('verifyStep', nextAfterVerify, {
     rereview: 'rereviewCollectStep',
     retry: 'prepareRetryStep',
   })
@@ -68,6 +70,10 @@ export const reviewWorkflow = new StateGraph(State)
   .addEdge('rereviewCollectStep', 'reviewStep')
   .addEdge('pushPlanStep', 'pushFeedbackStep')
   .addConditionalEdges('pushFeedbackStep', shouldExecutePush, {
+    push: 'commitStep',
+    end: END,
+  })
+  .addConditionalEdges('commitStep', nextAfterCommit, {
     push: 'pushStep',
     end: END,
   })
@@ -85,6 +91,7 @@ export async function reviewCode(input: ReviewInput = {}): Promise<ReviewWorkflo
     humanFeedback: result.humanFeedback,
     modify: result.modify,
     verify: result.verify,
+    commit: result.commit,
     pushFeedbackRequest: result.pushFeedbackRequest,
     pushFeedback: result.pushFeedback,
     pushPlan: result.pushPlan,
@@ -97,7 +104,14 @@ export { judgeAgent } from './agents/judgeAgent/index.js'
 export { modifyAgent } from './agents/modifyAgent/index.js'
 export { pushAgent, pushPlannerAgent } from './agents/pushAgent/index.js'
 export { reviewAgent } from './agents/reviewAgent/index.js'
+export { reviewInstructionAgent } from './agents/reviewInstructionAgent/index.js'
 export { verifyAgent } from './agents/verifyAgent/index.js'
+export type {
+  CommitResult,
+} from './schemas/commit.js'
+export type {
+  WorkflowUserInstruction,
+} from './schemas/instruction.js'
 export type {
   ModifyChange,
   ModifyInput,

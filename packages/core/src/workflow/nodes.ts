@@ -1,17 +1,20 @@
+import type { CommitResult } from '../schemas/commit.js'
+import type { WorkflowUserInstruction } from '../schemas/instruction.js'
 import type { ModifyResult } from '../schemas/modify.js'
 import type { PushResult } from '../schemas/push.js'
-import type { VerificationResult } from '../schemas/verify.js'
 import type { ReviewInput } from '../schemas/workflow.js'
 import type { ReviewWorkflowState } from './state.js'
 import { collectAgent } from '../agents/collectAgent/index.js'
 import { judgeAgent } from '../agents/judgeAgent/index.js'
 import { modifyAgent } from '../agents/modifyAgent/index.js'
 import { pushAgent, pushPlannerAgent } from '../agents/pushAgent/index.js'
+import { reviewInstructionAgent } from '../agents/reviewInstructionAgent/index.js'
 import { reviewAgent } from '../agents/reviewAgent/index.js'
-import { verifyAgent } from '../agents/verifyAgent/index.js'
+import { createRepositoryGit } from '../utils/git.js'
 import { required } from '../utils/required.js'
 import { buildHumanFeedbackRequest, buildPushFeedbackRequest } from './feedback.js'
 import { normalizePushPlan } from './push.js'
+import { buildModifyInstructionPrompt, buildReviewInstructionPrompt, getLatestUserInstruction, hasNewUserInstruction } from './reviewInstruction.js'
 
 export async function collect(input: ReviewInput) {
   if (!input.repository) {
@@ -25,9 +28,19 @@ export async function collect(input: ReviewInput) {
   return String(result.messages.at(-1)?.content ?? '')
 }
 
-export async function review(commitContext: string) {
+export async function review(commitContext: string, instruction?: string) {
   const result = await reviewAgent.invoke({
-    messages: [{ role: 'user', content: `请审查以下 diff，并输出 ReviewResult：\n\n${commitContext}` }],
+    messages: [{
+      role: 'user',
+      content: [
+        '请审查以下 diff，并输出 ReviewResult。',
+        '',
+        '用户意见指令：',
+        instruction ?? '(none)',
+        '',
+        commitContext,
+      ].join('\n'),
+    }],
   })
 
   return result.structuredResponse
@@ -48,6 +61,7 @@ export async function humanFeedback(state: ReviewWorkflowState) {
     modify: state.modify,
     verify: state.verify,
   })
+  let feedback = state.humanFeedback
 
   if (!judgeResult.shouldRequestUserFeedback) {
     return {
@@ -60,17 +74,20 @@ export async function humanFeedback(state: ReviewWorkflowState) {
   }
 
   if (state.humanFeedback && !state.modify && !state.verify) {
-    return { feedbackRequest, humanFeedback: state.humanFeedback }
+    feedback = state.humanFeedback
+  }
+  else if (state.requestHumanFeedback) {
+    feedback = await state.requestHumanFeedback(feedbackRequest)
+  }
+  else {
+    return { feedbackRequest }
   }
 
-  if (state.requestHumanFeedback) {
-    return {
-      feedbackRequest,
-      humanFeedback: await state.requestHumanFeedback(feedbackRequest),
-    }
+  return {
+    feedbackRequest,
+    humanFeedback: feedback,
+    userInstruction: await resolveUserInstruction(state.userInstruction, reviewResult, feedback),
   }
-
-  return { feedbackRequest }
 }
 
 export function nextAfterHumanFeedback(state: ReviewWorkflowState) {
@@ -85,6 +102,7 @@ export function nextAfterHumanFeedback(state: ReviewWorkflowState) {
 
 export async function modify(state: ReviewWorkflowState): Promise<ModifyResult> {
   const repository = state.repository
+  const reviewResult = required(state.review, 'review')
 
   if (!repository) {
     return {
@@ -100,9 +118,9 @@ export async function modify(state: ReviewWorkflowState): Promise<ModifyResult> 
         role: 'user',
         content: JSON.stringify({
           repository,
-          review: required(state.review, 'review'),
+          review: reviewResult,
           commitContext: state.commitContext,
-          instruction: state.humanFeedback?.message,
+          instruction: buildModifyInstructionPrompt(state.userInstruction),
         }, null, 2),
       },
     ],
@@ -112,56 +130,68 @@ export async function modify(state: ReviewWorkflowState): Promise<ModifyResult> 
 }
 
 export function nextAfterModify(state: ReviewWorkflowState) {
-  return state.modify?.success && !state.modify.skipped ? 'verify' : 'retry'
+  return state.modify?.success ? 'rereview' : 'retry'
 }
 
-export async function verify(state: ReviewWorkflowState): Promise<VerificationResult> {
+export async function commit(state: ReviewWorkflowState): Promise<CommitResult> {
   const repository = state.repository
 
   if (!repository) {
     return {
-      ok: false,
+      success: false,
       skipped: true,
-      plan: {
-        cwd: '.',
-        tasks: [],
-      },
-      tasks: [],
-      message: '缺少 repository，无法执行验证。',
+      message: '缺少 repository，无法执行 git commit。',
     }
   }
 
-  const result = await verifyAgent.invoke({
-    messages: [
-      {
-        role: 'user',
-        content: JSON.stringify({
-          repository,
-          instruction: state.humanFeedback?.message,
-        }, null, 2),
-      },
-    ],
-  })
+  const git = createRepositoryGit(repository)
 
-  return result.structuredResponse
+  try {
+    const status = await git.status()
+    const stagedFiles = status.files.map(file => file.path)
+
+    if (stagedFiles.length === 0) {
+      return {
+        success: true,
+        skipped: true,
+        message: '工作区无待提交改动，已跳过 git commit。',
+      }
+    }
+
+    const commitMessage = buildCommitMessage(state)
+
+    await git.raw(['add', '-A'])
+
+    const result = await git.commit(commitMessage)
+
+    return {
+      success: true,
+      skipped: false,
+      commitHash: result.commit,
+      commitMessage,
+      stagedFiles,
+      message: `已创建提交 ${result.commit.slice(0, 7)}。`,
+    }
+  }
+  catch (error) {
+    return {
+      success: false,
+      skipped: true,
+      message: `执行 git commit 失败：${error instanceof Error ? error.message : String(error)}`,
+    }
+  }
 }
 
-export function nextAfterVerify(state: ReviewWorkflowState) {
-  return state.verify?.ok ? 'rereview' : 'retry'
+export function nextAfterCommit(state: ReviewWorkflowState) {
+  return state.commit?.success ? 'push' : 'end'
 }
 
 export async function prepareRetry(state: ReviewWorkflowState) {
   const repository = state.repository
 
-  return {
-    commitContext: repository ? await collect({ repository, commitLimit: state.commitLimit }) : state.commitContext,
-    humanFeedback: undefined,
-    feedbackRequest: undefined,
-    pushFeedback: undefined,
-    pushFeedbackRequest: undefined,
-    pushPlan: undefined,
-    push: undefined,
-  }
+  return buildWorkflowReset(
+    repository ? await collect({ repository, commitLimit: state.commitLimit }) : state.commitContext,
+  )
 }
 
 export async function rereviewCollect(state: ReviewWorkflowState) {
@@ -171,15 +201,7 @@ export async function rereviewCollect(state: ReviewWorkflowState) {
     throw new Error('缺少 repository，无法收集重新审查所需上下文。')
   }
 
-  return {
-    commitContext: await collect({ repository, commitLimit: state.commitLimit }),
-    humanFeedback: undefined,
-    feedbackRequest: undefined,
-    pushFeedback: undefined,
-    pushFeedbackRequest: undefined,
-    pushPlan: undefined,
-    push: undefined,
-  }
+  return buildWorkflowReset(await collect({ repository, commitLimit: state.commitLimit }))
 }
 
 export async function planPush(state: ReviewWorkflowState) {
@@ -250,6 +272,52 @@ export async function push(state: ReviewWorkflowState): Promise<PushResult> {
         content: JSON.stringify({ repository, selectedOption }, null, 2),
       },
     ],
+  })
+
+  return result.structuredResponse
+}
+
+function buildCommitMessage(state: ReviewWorkflowState) {
+  if (state.modify?.success && !state.modify.skipped) {
+    return 'fix: address review findings'
+  }
+
+  return 'chore: apply reviewed changes'
+}
+
+function buildWorkflowReset(commitContext: string | undefined) {
+  return {
+    commitContext,
+    humanFeedback: undefined,
+    feedbackRequest: undefined,
+    pushFeedback: undefined,
+    pushFeedbackRequest: undefined,
+    commit: undefined,
+    pushPlan: undefined,
+    push: undefined,
+  }
+}
+
+async function resolveUserInstruction(
+  previousInstruction: WorkflowUserInstruction | undefined,
+  reviewResult: ReviewWorkflowState['review'],
+  feedback: ReviewWorkflowState['humanFeedback'],
+) {
+  const latestInstruction = getLatestUserInstruction(feedback?.instruction)
+
+  if (!hasNewUserInstruction(latestInstruction)) {
+    return previousInstruction
+  }
+
+  const result = await reviewInstructionAgent.invoke({
+    messages: [{
+      role: 'user',
+      content: JSON.stringify({
+        review: required(reviewResult, 'review'),
+        previousInstruction,
+        latestInstruction,
+      }, null, 2),
+    }],
   })
 
   return result.structuredResponse
