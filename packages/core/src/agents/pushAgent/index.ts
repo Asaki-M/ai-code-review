@@ -4,7 +4,7 @@ import { ChatVertexAI } from '@langchain/google-vertexai'
 import { createAgent } from 'langchain'
 import { simpleGit } from 'simple-git'
 import { z } from 'zod'
-import { pushPlanSchema, pushResultSchema } from '../schemas/push.js'
+import { pushPlanSchema, pushResultSchema } from '../../schemas/push.js'
 
 const llm = new ChatVertexAI({
   model: 'gemini-2.5-pro',

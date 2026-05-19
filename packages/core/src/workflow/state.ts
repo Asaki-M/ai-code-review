@@ -1,5 +1,7 @@
+import type { ModifyResult } from '../schemas/modify.js'
 import type { PushPlan, PushResult } from '../schemas/push.js'
 import type { JudgeResult, ReviewResult } from '../schemas/review.js'
+import type { VerificationResult } from '../schemas/verify.js'
 import type { HumanFeedbackRequest, HumanFeedbackResponse, ReviewInput } from '../schemas/workflow.js'
 import { Annotation } from '@langchain/langgraph'
 
@@ -11,6 +13,8 @@ export const State = Annotation.Root({
   review: Annotation<ReviewResult | undefined>,
   judge: Annotation<JudgeResult | undefined>,
   humanFeedback: Annotation<HumanFeedbackResponse | undefined>,
+  modify: Annotation<ModifyResult | undefined>,
+  verify: Annotation<VerificationResult | undefined>,
   pushFeedback: Annotation<HumanFeedbackResponse | undefined>,
   feedbackRequest: Annotation<HumanFeedbackRequest | undefined>,
   pushFeedbackRequest: Annotation<HumanFeedbackRequest | undefined>,

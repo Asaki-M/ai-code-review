@@ -1,27 +1,49 @@
 import type { ReviewInput, ReviewWorkflowResult } from './schemas/workflow.js'
 import { END, START, StateGraph } from '@langchain/langgraph'
 import { required } from './utils/required.js'
-import { collect, humanFeedback, judge, planPush, push, pushFeedback, review, shouldExecutePush, shouldPush } from './workflow/nodes.js'
+import { collect, humanFeedback, judge, modify, nextAfterHumanFeedback, nextAfterModify, nextAfterVerify, planPush, prepareRetry, push, pushFeedback, rereviewCollect, review, shouldExecutePush, verify } from './workflow/nodes.js'
 import { State } from './workflow/state.js'
 
 /**
  * workflow:
- * - collect agent: 获取目标仓库 diff、commit metadata、branch 信息
- * - review agent: 基于 diff 输出结构化 review 结果
- * - judge agent: 根据 review 指标给出 PASS / REJECT
- * - human feedback:
- *    - PASS: 请求用户确认是否推送
- *    - REJECT: 展示问题和修改建议，请求用户选择自动修改、强制推送或取消
- * - modify agent: 根据 review 结果和用户反馈应用 patch 或修改工作区文件
- * - verify agent: 运行 lint / typecheck / test，失败则回到 human feedback
- * - rereview: 对修改后的 diff 再次进入 review agent
- * - push agent: 用户最终确认后推送
+ * - collect:
+ *   获取目标仓库的 commit context；如果调用方直接传入 diff，则跳过仓库采集
+ * - reviewStep:
+ *   review agent 基于 commit context / diff 输出结构化 ReviewResult
+ * - judgeStep:
+ *   judge agent 根据 review 结果给出 PASS / REJECT 和下一步动作
+ * - humanFeedbackStep:
+ *   - PASS: 请求用户确认是否继续推送
+ *   - REJECT: 展示问题列表，请用户选择自动修改、强制推送或取消
+ * - modifyStep:
+ *   当用户选择 auto_modify 时，modify agent 根据 review 结果修改代码
+ * - verifyStep:
+ *   modify 成功后，verify agent 自动识别并执行 lint / typecheck / test / build
+ * - prepareRetryStep:
+ *   如果 modify 或 verify 失败，刷新最新 commit context，并回到 humanFeedbackStep 再次让用户决策
+ * - rereviewCollectStep:
+ *   如果 verify 通过，重新收集修改后的 commit context，再次进入 reviewStep / judgeStep 做复审
+ * - pushPlanStep:
+ *   当用户确认可以推送时，分析并生成候选 git push 方案
+ * - pushFeedbackStep:
+ *   让用户从 push 方案中选择一种实际执行方式
+ * - pushStep:
+ *   按用户选择执行 git push
+ *
+ * 整体流程是一个带回环的审查工作流：
+ * 初审未通过时可以自动修改 -> 自动验证 -> 自动复审；
+ * 任一环节失败则回到人工决策；
+ * 最终只有在审查通过且用户确认后才会进入推送阶段。
  */
 export const reviewWorkflow = new StateGraph(State)
   .addNode('collect', async state => ({ commitContext: state.diff ?? await collect(state) }))
   .addNode('reviewStep', async state => ({ review: await review(required(state.commitContext, 'commitContext')) }))
   .addNode('judgeStep', async state => ({ judge: await judge(state.review) }))
   .addNode('humanFeedbackStep', async state => humanFeedback(state))
+  .addNode('modifyStep', async state => ({ modify: await modify(state) }))
+  .addNode('verifyStep', async state => ({ verify: await verify(state) }))
+  .addNode('prepareRetryStep', async state => prepareRetry(state))
+  .addNode('rereviewCollectStep', async state => rereviewCollect(state))
   .addNode('pushPlanStep', async state => ({ pushPlan: await planPush(state) }))
   .addNode('pushFeedbackStep', async state => pushFeedback(state))
   .addNode('pushStep', async state => ({ push: await push(state) }))
@@ -29,10 +51,21 @@ export const reviewWorkflow = new StateGraph(State)
   .addEdge('collect', 'reviewStep')
   .addEdge('reviewStep', 'judgeStep')
   .addEdge('judgeStep', 'humanFeedbackStep')
-  .addConditionalEdges('humanFeedbackStep', shouldPush, {
+  .addConditionalEdges('humanFeedbackStep', nextAfterHumanFeedback, {
+    modify: 'modifyStep',
     push: 'pushPlanStep',
     end: END,
   })
+  .addConditionalEdges('modifyStep', nextAfterModify, {
+    verify: 'verifyStep',
+    retry: 'prepareRetryStep',
+  })
+  .addConditionalEdges('verifyStep', nextAfterVerify, {
+    rereview: 'rereviewCollectStep',
+    retry: 'prepareRetryStep',
+  })
+  .addEdge('prepareRetryStep', 'humanFeedbackStep')
+  .addEdge('rereviewCollectStep', 'reviewStep')
   .addEdge('pushPlanStep', 'pushFeedbackStep')
   .addConditionalEdges('pushFeedbackStep', shouldExecutePush, {
     push: 'pushStep',
@@ -50,6 +83,8 @@ export async function reviewCode(input: ReviewInput = {}): Promise<ReviewWorkflo
     judge: required(result.judge, 'judge'),
     feedbackRequest: result.feedbackRequest,
     humanFeedback: result.humanFeedback,
+    modify: result.modify,
+    verify: result.verify,
     pushFeedbackRequest: result.pushFeedbackRequest,
     pushFeedback: result.pushFeedback,
     pushPlan: result.pushPlan,
@@ -57,10 +92,17 @@ export async function reviewCode(input: ReviewInput = {}): Promise<ReviewWorkflo
   }
 }
 
-export { collectAgent } from './agents/collectAgent.js'
-export { judgeAgent } from './agents/judgeAgent.js'
-export { pushAgent, pushPlannerAgent } from './agents/pushAgent.js'
+export { collectAgent } from './agents/collectAgent/index.js'
+export { judgeAgent } from './agents/judgeAgent/index.js'
+export { modifyAgent } from './agents/modifyAgent/index.js'
+export { pushAgent, pushPlannerAgent } from './agents/pushAgent/index.js'
 export { reviewAgent } from './agents/reviewAgent/index.js'
+export { verifyAgent } from './agents/verifyAgent/index.js'
+export type {
+  ModifyChange,
+  ModifyInput,
+  ModifyResult,
+} from './schemas/modify.js'
 export type {
   PushPlan,
   PushPlanOption,
@@ -73,6 +115,14 @@ export type {
   ReviewSeverity,
   WorkflowDecision,
 } from './schemas/review.js'
+export type {
+  VerificationInput,
+  VerificationPlan,
+  VerificationResult,
+  VerificationTask,
+  VerificationTaskName,
+  VerificationTaskResult,
+} from './schemas/verify.js'
 export type {
   HumanFeedbackRequest,
   HumanFeedbackResponse,

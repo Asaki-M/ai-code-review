@@ -1,10 +1,14 @@
+import type { ModifyResult } from '../schemas/modify.js'
 import type { PushResult } from '../schemas/push.js'
+import type { VerificationResult } from '../schemas/verify.js'
 import type { ReviewInput } from '../schemas/workflow.js'
 import type { ReviewWorkflowState } from './state.js'
-import { collectAgent } from '../agents/collectAgent.js'
-import { judgeAgent } from '../agents/judgeAgent.js'
-import { pushAgent, pushPlannerAgent } from '../agents/pushAgent.js'
+import { collectAgent } from '../agents/collectAgent/index.js'
+import { judgeAgent } from '../agents/judgeAgent/index.js'
+import { modifyAgent } from '../agents/modifyAgent/index.js'
+import { pushAgent, pushPlannerAgent } from '../agents/pushAgent/index.js'
 import { reviewAgent } from '../agents/reviewAgent/index.js'
+import { verifyAgent } from '../agents/verifyAgent/index.js'
 import { required } from '../utils/required.js'
 import { buildHumanFeedbackRequest, buildPushFeedbackRequest } from './feedback.js'
 import { normalizePushPlan } from './push.js'
@@ -40,7 +44,10 @@ export async function judge(reviewResult: ReviewWorkflowState['review']) {
 export async function humanFeedback(state: ReviewWorkflowState) {
   const reviewResult = required(state.review, 'review')
   const judgeResult = required(state.judge, 'judge')
-  const feedbackRequest = buildHumanFeedbackRequest(reviewResult, judgeResult)
+  const feedbackRequest = buildHumanFeedbackRequest(reviewResult, judgeResult, {
+    modify: state.modify,
+    verify: state.verify,
+  })
 
   if (!judgeResult.shouldRequestUserFeedback) {
     return {
@@ -52,7 +59,7 @@ export async function humanFeedback(state: ReviewWorkflowState) {
     }
   }
 
-  if (state.humanFeedback) {
+  if (state.humanFeedback && !state.modify && !state.verify) {
     return { feedbackRequest, humanFeedback: state.humanFeedback }
   }
 
@@ -66,10 +73,113 @@ export async function humanFeedback(state: ReviewWorkflowState) {
   return { feedbackRequest }
 }
 
-export function shouldPush(state: ReviewWorkflowState) {
+export function nextAfterHumanFeedback(state: ReviewWorkflowState) {
   const action = state.humanFeedback?.action
 
+  if (action === 'auto_modify') {
+    return 'modify'
+  }
+
   return action === 'approved' || action === 'force_push' ? 'push' : 'end'
+}
+
+export async function modify(state: ReviewWorkflowState): Promise<ModifyResult> {
+  const repository = state.repository
+
+  if (!repository) {
+    return {
+      success: false,
+      skipped: true,
+      message: '缺少 repository，无法执行自动修改。',
+    }
+  }
+
+  const result = await modifyAgent.invoke({
+    messages: [
+      {
+        role: 'user',
+        content: JSON.stringify({
+          repository,
+          review: required(state.review, 'review'),
+          commitContext: state.commitContext,
+          instruction: state.humanFeedback?.message,
+        }, null, 2),
+      },
+    ],
+  })
+
+  return result.structuredResponse
+}
+
+export function nextAfterModify(state: ReviewWorkflowState) {
+  return state.modify?.success && !state.modify.skipped ? 'verify' : 'retry'
+}
+
+export async function verify(state: ReviewWorkflowState): Promise<VerificationResult> {
+  const repository = state.repository
+
+  if (!repository) {
+    return {
+      ok: false,
+      skipped: true,
+      plan: {
+        cwd: '.',
+        tasks: [],
+      },
+      tasks: [],
+      message: '缺少 repository，无法执行验证。',
+    }
+  }
+
+  const result = await verifyAgent.invoke({
+    messages: [
+      {
+        role: 'user',
+        content: JSON.stringify({
+          repository,
+          instruction: state.humanFeedback?.message,
+        }, null, 2),
+      },
+    ],
+  })
+
+  return result.structuredResponse
+}
+
+export function nextAfterVerify(state: ReviewWorkflowState) {
+  return state.verify?.ok ? 'rereview' : 'retry'
+}
+
+export async function prepareRetry(state: ReviewWorkflowState) {
+  const repository = state.repository
+
+  return {
+    commitContext: repository ? await collect({ repository, commitLimit: state.commitLimit }) : state.commitContext,
+    humanFeedback: undefined,
+    feedbackRequest: undefined,
+    pushFeedback: undefined,
+    pushFeedbackRequest: undefined,
+    pushPlan: undefined,
+    push: undefined,
+  }
+}
+
+export async function rereviewCollect(state: ReviewWorkflowState) {
+  const repository = state.repository
+
+  if (!repository) {
+    throw new Error('缺少 repository，无法收集重新审查所需上下文。')
+  }
+
+  return {
+    commitContext: await collect({ repository, commitLimit: state.commitLimit }),
+    humanFeedback: undefined,
+    feedbackRequest: undefined,
+    pushFeedback: undefined,
+    pushFeedbackRequest: undefined,
+    pushPlan: undefined,
+    push: undefined,
+  }
 }
 
 export async function planPush(state: ReviewWorkflowState) {

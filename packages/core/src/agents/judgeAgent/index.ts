@@ -1,6 +1,6 @@
 import { ChatVertexAI } from '@langchain/google-vertexai'
 import { createAgent } from 'langchain'
-import { judgeResultSchema } from '../schemas/review.js'
+import { judgeResultSchema } from '../../schemas/review.js'
 
 const llm = new ChatVertexAI({
   model: 'gemini-2.5-pro',
