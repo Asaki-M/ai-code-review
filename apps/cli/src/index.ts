@@ -39,7 +39,6 @@ function formatCliResult(result: Awaited<ReturnType<typeof reviewCode>>) {
     judge: result.judge,
     humanFeedback: result.humanFeedback,
     modify: result.modify,
-    verify: result.verify,
     commit: result.commit,
     pushPlan: result.pushPlan,
     pushFeedback: result.pushFeedback,
@@ -85,10 +84,6 @@ function printFeedbackRequest(request: HumanFeedbackRequest) {
 
   if (request.modify) {
     printModifySummary(request.modify)
-  }
-
-  if (request.verify) {
-    printVerifySummary(request.verify)
   }
 
   console.log('')
@@ -181,26 +176,6 @@ function printModifySummary(modify: NonNullable<HumanFeedbackRequest['modify']>)
     console.log('- 修改文件:')
     for (const change of modify.changedFiles) {
       console.log(`  - ${change.file}: ${change.summary}`)
-    }
-  }
-}
-
-function printVerifySummary(verify: NonNullable<HumanFeedbackRequest['verify']>) {
-  console.log('验证结果')
-  console.log(`- 状态: ${verify.ok ? 'passed' : 'failed'}${verify.skipped ? ' (skipped)' : ''}`)
-  console.log(`- 摘要: ${verify.message}`)
-
-  if (verify.tasks.length) {
-    console.log('- 任务:')
-    for (const task of verify.tasks) {
-      const status = task.ok ? 'ok' : 'fail'
-      console.log(`  - ${task.name} [${status}] ${task.command}`)
-      if (!task.ok) {
-        const detail = task.stderr.trim() || task.stdout.trim()
-        if (detail) {
-          console.log(`    ${truncateLine(detail)}`)
-        }
-      }
     }
   }
 }

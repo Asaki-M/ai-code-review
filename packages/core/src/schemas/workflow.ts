@@ -2,7 +2,6 @@ import type { CommitResult } from './commit.js'
 import type { ModifyResult } from './modify.js'
 import type { PushPlan, PushResult } from './push.js'
 import type { JudgeResult, ReviewResult } from './review.js'
-import type { VerificationResult } from './verify.js'
 
 export type HumanFeedbackAction = 'confirm_push' | 'approve_changes' | 'select_push'
 
@@ -16,7 +15,6 @@ export interface HumanFeedbackRequest {
   review: ReviewResult
   judge: JudgeResult
   modify?: ModifyResult
-  verify?: VerificationResult
   pushPlan?: PushPlan
 }
 
@@ -43,7 +41,6 @@ export interface ReviewWorkflowResult {
   feedbackRequest?: HumanFeedbackRequest
   humanFeedback?: HumanFeedbackResponse
   modify?: ModifyResult
-  verify?: VerificationResult
   commit?: CommitResult
   pushFeedbackRequest?: HumanFeedbackRequest
   pushFeedback?: HumanFeedbackResponse

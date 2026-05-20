@@ -94,7 +94,6 @@ export async function reviewCode(input: ReviewInput = {}): Promise<ReviewWorkflo
     feedbackRequest: result.feedbackRequest,
     humanFeedback: result.humanFeedback,
     modify: result.modify,
-    verify: result.verify,
     commit: result.commit,
     pushFeedbackRequest: result.pushFeedbackRequest,
     pushFeedback: result.pushFeedback,
@@ -109,7 +108,6 @@ export { modifyAgent } from './agents/modifyAgent/index.js'
 export { pushAgent, pushPlannerAgent } from './agents/pushAgent/index.js'
 export { reviewAgent } from './agents/reviewAgent/index.js'
 export { reviewInstructionAgent } from './agents/reviewInstructionAgent/index.js'
-export { verifyAgent } from './agents/verifyAgent/index.js'
 export type {
   CommitResult,
 } from './schemas/commit.js'
@@ -133,14 +131,6 @@ export type {
   ReviewSeverity,
   WorkflowDecision,
 } from './schemas/review.js'
-export type {
-  VerificationInput,
-  VerificationPlan,
-  VerificationResult,
-  VerificationTask,
-  VerificationTaskName,
-  VerificationTaskResult,
-} from './schemas/verify.js'
 export type {
   HumanFeedbackRequest,
   HumanFeedbackResponse,

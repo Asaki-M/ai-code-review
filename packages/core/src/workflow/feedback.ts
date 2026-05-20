@@ -1,13 +1,12 @@
 import type { ModifyResult } from '../schemas/modify.js'
 import type { PushPlan } from '../schemas/push.js'
 import type { JudgeResult, ReviewResult } from '../schemas/review.js'
-import type { VerificationResult } from '../schemas/verify.js'
 import type { HumanFeedbackRequest } from '../schemas/workflow.js'
 
 export function buildHumanFeedbackRequest(
   reviewResult: ReviewResult,
   judgeResult: JudgeResult,
-  options: { modify?: ModifyResult, verify?: VerificationResult } = {},
+  options: { modify?: ModifyResult } = {},
 ): HumanFeedbackRequest {
   if (judgeResult.decision === 'PASS') {
     return {
@@ -18,7 +17,6 @@ export function buildHumanFeedbackRequest(
       review: reviewResult,
       judge: judgeResult,
       modify: options.modify,
-      verify: options.verify,
     }
   }
 
@@ -30,7 +28,6 @@ export function buildHumanFeedbackRequest(
     review: reviewResult,
     judge: judgeResult,
     modify: options.modify,
-    verify: options.verify,
   }
 }
 
@@ -64,7 +61,7 @@ function formatPushPlanMessage(pushPlan: PushPlan) {
 function formatChangeRequestMessage(
   reviewResult: ReviewResult,
   judgeResult: JudgeResult,
-  options: { modify?: ModifyResult, verify?: VerificationResult },
+  options: { modify?: ModifyResult },
 ) {
   const findings = reviewResult.findings.map((finding, index) => {
     const location = [finding.file, finding.line].filter(Boolean).join(':')
@@ -85,23 +82,11 @@ function formatChangeRequestMessage(
   ].filter(Boolean).join('\n')
 }
 
-function formatAdditionalContext({ modify, verify }: { modify?: ModifyResult, verify?: VerificationResult }) {
+function formatAdditionalContext({ modify }: { modify?: ModifyResult }) {
   const sections: string[] = []
 
   if (modify && (!modify.success || modify.skipped)) {
     sections.push(`自动修改结果：${modify.message}`)
-  }
-
-  if (verify && !verify.ok) {
-    const failedTasks = verify.tasks
-      .filter(task => task.required && !task.ok)
-      .map(task => `${task.name}: ${task.command}`)
-      .join('\n')
-
-    sections.push([
-      `验证结果：${verify.message}`,
-      failedTasks ? `失败任务：\n${failedTasks}` : '',
-    ].filter(Boolean).join('\n'))
   }
 
   return sections.join('\n\n')

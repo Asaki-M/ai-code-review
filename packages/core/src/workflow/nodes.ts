@@ -65,7 +65,6 @@ export async function humanFeedback(state: ReviewWorkflowState) {
   const judgeResult = required(state.judge, 'judge')
   const feedbackRequest = buildHumanFeedbackRequest(reviewResult, judgeResult, {
     modify: state.modify,
-    verify: state.verify,
   })
   let feedback = state.humanFeedback
 
@@ -79,7 +78,7 @@ export async function humanFeedback(state: ReviewWorkflowState) {
     }
   }
 
-  if (state.humanFeedback && !state.modify && !state.verify) {
+  if (state.humanFeedback && !state.modify) {
     feedback = state.humanFeedback
   }
   else if (state.requestHumanFeedback) {

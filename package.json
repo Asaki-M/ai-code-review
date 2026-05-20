@@ -9,12 +9,11 @@
   "license": "ISC",
   "keywords": [],
   "scripts": {
-    "build": "tsc -b packages/core apps/api apps/cli",
-    "dev:api": "dotenv -e .env -- pnpm --filter @ai-code-review/api dev",
+    "build": "tsc -b packages/core apps/cli",
     "dev:cli": "dotenv -e .env -- pnpm --filter @ai-code-review/cli dev",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "typecheck": "tsc -b packages/core apps/api apps/cli --pretty",
+    "typecheck": "tsc -b packages/core apps/cli --pretty",
     "start:cli": "pnpm --filter @ai-code-review/core build && pnpm --filter @ai-code-review/cli build && dotenv -e .env -- pnpm --filter @ai-code-review/cli start"
   },
   "devDependencies": {

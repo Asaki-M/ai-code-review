@@ -16,10 +16,6 @@ export function buildModifyInstructionPrompt(userInstruction: WorkflowUserInstru
   return userInstruction?.modifyInstruction
 }
 
-export function buildVerifyInstructionPrompt(userInstruction: WorkflowUserInstruction | undefined) {
-  return userInstruction?.verifyInstruction
-}
-
 function normalizeInstruction(instruction: string | undefined) {
   const normalized = instruction?.trim()
   return normalized || undefined
