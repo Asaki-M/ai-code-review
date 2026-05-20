@@ -1,0 +1,14 @@
+README.md
+  h_b690bb793b7533 1-64,102-165
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.11",
+  "base_commit_sha": "8f19cee40aa27581cdb5f54692bb82f24a08421c",
+  "prompts": {},
+  "humans": {
+    "h_b690bb793b7533": {
+      "author": "Qinghuan <1041220793@qq.com>"
+    }
+  }
+}
