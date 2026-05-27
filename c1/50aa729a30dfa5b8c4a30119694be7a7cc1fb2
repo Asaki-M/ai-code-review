@@ -1,0 +1,20 @@
+packages/core/src/workflow/session.ts
+  h_b690bb793b7533 1-96
+packages/core/src/workflow/nodes/feedbackNodes.ts
+  h_b690bb793b7533 1-101
+packages/core/src/workflow/graph.ts
+  h_b690bb793b7533 1-95
+packages/core/src/index.ts
+  h_b690bb793b7533 35-42,45-46
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "c150aa729a30dfa5b8c4a30119694be7a7cc1fb2",
+  "prompts": {},
+  "humans": {
+    "h_b690bb793b7533": {
+      "author": "Qinghuan <1041220793@qq.com>"
+    }
+  }
+}
