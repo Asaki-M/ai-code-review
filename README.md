@@ -160,6 +160,40 @@ pnpm dev:cli -- --repo /absolute/path/to/your-repo --limit 5
 - 不传 `--repo` 时，默认审查当前工作目录。
 - CLI 是一次性命令，不是常驻服务。
 
+#### 持续化会话与中断恢复
+
+现在工作流已经基于 LangGraph 的 checkpoint + `interrupt` 改成了可持续化会话模式。
+
+当流程运行到人工决策节点时，状态会先持久化到本地 checkpoint 文件，然后等待恢复输入继续执行。
+
+启动一个带持久化的审查会话：
+
+```bash
+pnpm dev:cli -- --session --repo /absolute/path/to/your-repo --limit 5
+```
+
+查看某个会话当前停在哪：
+
+```bash
+pnpm dev:cli -- --status --thread <threadId>
+```
+
+恢复一个中断中的会话：
+
+```bash
+pnpm dev:cli -- --resume --thread <threadId>
+```
+
+可选参数：
+
+- `--thread`：显式指定 thread id；不传时会自动生成。
+- `--checkpoint`：指定 checkpoint 文件路径，默认是 `./.ai-code-review/checkpoints.json`。
+
+补充说明：
+
+- 默认的一次性模式 `pnpm dev:cli -- --repo ...` 仍然可用，它会在当前进程内自动接管中断并继续执行。
+- `--session` 模式更适合长流程、跨终端恢复、或者后续接 Web/API 场景。
+
 如果你想用编译后的版本运行：
 
 ```bash

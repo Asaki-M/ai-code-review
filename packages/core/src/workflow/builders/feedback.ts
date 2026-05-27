@@ -1,7 +1,7 @@
-import type { ModifyResult } from '../schemas/modify.js'
-import type { PushPlan } from '../schemas/push.js'
-import type { JudgeResult, ReviewResult } from '../schemas/review.js'
-import type { HumanFeedbackRequest } from '../schemas/workflow.js'
+import type { ModifyResult } from '../../schemas/modify.js'
+import type { PushPlan } from '../../schemas/push.js'
+import type { JudgeResult, ReviewResult } from '../../schemas/review.js'
+import type { HumanFeedbackRequest } from '../../schemas/workflow.js'
 
 export function buildHumanFeedbackRequest(
   reviewResult: ReviewResult,

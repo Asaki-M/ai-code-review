@@ -1,4 +1,4 @@
-import type { WorkflowUserInstruction } from '../schemas/instruction.js'
+import type { WorkflowUserInstruction } from '../../schemas/instruction.js'
 
 export function hasNewUserInstruction(instruction: string | undefined) {
   return Boolean(normalizeInstruction(instruction))

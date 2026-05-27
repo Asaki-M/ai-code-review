@@ -1,4 +1,4 @@
-import type { PushPlan } from '../schemas/push.js'
+import type { PushPlan } from '../../schemas/push.js'
 
 export function normalizePushPlan(pushPlan: PushPlan): PushPlan {
   const options = pushPlan.options.map(option => ({

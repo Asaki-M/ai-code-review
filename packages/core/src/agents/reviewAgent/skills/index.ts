@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseMarkdownFrontmatter } from '../../../utils/frontmatter.js'
 
-export type ReviewSkillName = 'common' | 'frontend' | 'backend' | 'sql'
+export type ReviewSkillName = 'common' | 'frontend' | 'backend' | 'sql' | 'commit'
 
 export interface ReviewSkill {
   name: ReviewSkillName
@@ -11,7 +11,7 @@ export interface ReviewSkill {
   content: string
 }
 
-const skillFileNames = ['common.md', 'frontend.md', 'backend.md', 'sql.md'] as const
+const skillFileNames = ['common.md', 'frontend.md', 'backend.md', 'sql.md', 'commit.md'] as const
 
 function parseSkillMarkdown(markdown: string): ReviewSkill {
   const { metadata, content } = parseMarkdownFrontmatter(markdown)
@@ -35,7 +35,7 @@ function parseSkillMarkdown(markdown: string): ReviewSkill {
 }
 
 function isReviewSkillName(value: unknown): value is ReviewSkillName {
-  return value === 'common' || value === 'frontend' || value === 'backend' || value === 'sql'
+  return value === 'common' || value === 'frontend' || value === 'backend' || value === 'sql' || value === 'commit'
 }
 
 function loadReviewSkills() {

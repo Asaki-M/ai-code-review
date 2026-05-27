@@ -3,7 +3,7 @@ import type { WorkflowUserInstruction } from '../schemas/instruction.js'
 import type { ModifyResult } from '../schemas/modify.js'
 import type { PushPlan, PushResult } from '../schemas/push.js'
 import type { JudgeResult, ReviewResult } from '../schemas/review.js'
-import type { HumanFeedbackRequest, HumanFeedbackResponse, ReviewInput } from '../schemas/workflow.js'
+import type { HumanFeedbackRequest, HumanFeedbackResponse } from '../schemas/workflow.js'
 import { Annotation } from '@langchain/langgraph'
 
 export const State = Annotation.Root({
@@ -22,8 +22,6 @@ export const State = Annotation.Root({
   pushFeedbackRequest: Annotation<HumanFeedbackRequest | undefined>,
   pushPlan: Annotation<PushPlan | undefined>,
   push: Annotation<PushResult | undefined>,
-  requestHumanFeedback: Annotation<ReviewInput['requestHumanFeedback'] | undefined>,
-  requestPushFeedback: Annotation<ReviewInput['requestPushFeedback'] | undefined>,
 })
 
 export type ReviewWorkflowState = typeof State.State

@@ -17,7 +17,7 @@ const loadReviewSkillTool = tool(
     name: 'loadReviewSkill',
     description: '按名称读取某个 code review skill 的完整正文。当 diff 涉及对应领域时，应先读取对应 skill 再审查。',
     schema: z.object({
-      name: z.enum(['common', 'frontend', 'backend', 'sql']).describe('需要读取的 review skill 名称'),
+      name: z.enum(['common', 'frontend', 'backend', 'sql', 'commit']).describe('需要读取的 review skill 名称'),
     }),
   },
 )
@@ -38,6 +38,7 @@ ${reviewSkillCatalog}
 - 如果 diff 涉及前端组件、页面、样式、状态管理、浏览器 API 或前端安全，读取 frontend skill。
 - 如果 diff 涉及接口、服务、权限、任务、消息、缓存、文件、外部依赖或服务端安全，读取 backend skill。
 - 如果 diff 涉及 SQL、ORM 查询、数据库迁移、索引、事务或数据统计，读取 sql skill。
+- 如果输入中包含 commit message、提交规范要求，或需要判断提交信息是否与改动一致，读取 commit skill。
 - 可以读取多个 skill，并综合使用。
 - 如果无法判断领域，至少读取 common skill。
 
