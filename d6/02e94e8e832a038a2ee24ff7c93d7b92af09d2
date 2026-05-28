@@ -1,0 +1,14 @@
+apps/cli/src/index.ts
+  h_b690bb793b7533 11-12
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "d602e94e8e832a038a2ee24ff7c93d7b92af09d2",
+  "prompts": {},
+  "humans": {
+    "h_b690bb793b7533": {
+      "author": "Qinghuan <1041220793@qq.com>"
+    }
+  }
+}
