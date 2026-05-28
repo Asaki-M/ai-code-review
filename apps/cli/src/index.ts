@@ -7,9 +7,9 @@ import type {
   ReviewSessionSnapshot,
 } from '@ai-code-review/core'
 import { randomUUID } from 'node:crypto'
-import process from 'node:process'
 import { resolve } from 'node:path'
-import { getReviewSession, reviewCode, resumeReviewSession, startReviewSession } from '@ai-code-review/core'
+import process from 'node:process'
+import { getReviewSession, resumeReviewSession, reviewCode, startReviewSession } from '@ai-code-review/core'
 import { input, select } from '@inquirer/prompts'
 
 const args = process.argv.slice(2)
