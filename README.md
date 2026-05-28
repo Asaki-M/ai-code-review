@@ -166,6 +166,8 @@ pnpm dev:cli -- --repo /absolute/path/to/your-repo --limit 5
 
 当流程运行到人工决策节点时，状态会先持久化到本地 checkpoint 文件，然后等待恢复输入继续执行。
 
+如果你在交互过程中手动中断（例如 `Ctrl+C`），CLI 会打印当前 `threadId`、checkpoint 路径，以及可直接使用的恢复命令。
+
 启动一个带持久化的审查会话：
 
 ```bash
@@ -187,12 +189,13 @@ pnpm dev:cli -- --resume --thread <threadId>
 可选参数：
 
 - `--thread`：显式指定 thread id；不传时会自动生成。
-- `--checkpoint`：指定 checkpoint 文件路径，默认是 `./.ai-code-review/checkpoints.json`。
+- `--checkpoint`：指定 checkpoint 文件路径，默认是 `./.ai-code-review/checkpoints.sqlite`。
 
 补充说明：
 
 - 默认的一次性模式 `pnpm dev:cli -- --repo ...` 仍然可用，它会在当前进程内自动接管中断并继续执行。
 - `--session` 模式更适合长流程、跨终端恢复、或者后续接 Web/API 场景。
+- `--resume` 恢复时，需要使用和中断时相同的 `threadId` 与 checkpoint 文件路径。
 
 如果你想用编译后的版本运行：
 

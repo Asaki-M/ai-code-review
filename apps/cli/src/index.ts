@@ -323,7 +323,7 @@ Options:
   --resume             Resume an interrupted persisted session.
   --status             Print the latest persisted session snapshot.
   --thread             Explicit thread id for session/resume/status.
-  --checkpoint         Checkpoint file path. Defaults to ./.ai-code-review/checkpoints.json
+  --checkpoint         Checkpoint file path. Defaults to ./.ai-code-review/checkpoints.sqlite
   -h, --help           Show this help message.
 `)
 }
