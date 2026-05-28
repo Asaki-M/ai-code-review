@@ -1,0 +1,16 @@
+packages/core/src/workflow/session.ts
+  h_b690bb793b7533 1
+README.md
+  h_b690bb793b7533 41,174,180,186,196
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "a8e860ef681b053f32d27b9a144271a38941e806",
+  "prompts": {},
+  "humans": {
+    "h_b690bb793b7533": {
+      "author": "Qinghuan <1041220793@qq.com>"
+    }
+  }
+}
