@@ -56,7 +56,7 @@ export interface ReviewWorkflowResult {
 
 export interface ReviewSessionOptions {
   threadId?: string
-  checkpointPath?: string
+  checkpointPath: string
 }
 
 export interface ReviewSessionResumeInput {

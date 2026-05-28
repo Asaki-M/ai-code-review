@@ -38,7 +38,7 @@
   包括 `collectAgent`、`reviewAgent`、`judgeAgent`、`modifyAgent`、`pushAgent`、`reviewInstructionAgent`。
 - `workflow/`
   工作流编排层。
-  `nodes.ts` 里定义 collect、review、judge、modify、push 等节点及流转关系。
+  `graph.ts` 定义 LangGraph 流程拓扑，`state.ts` 定义会被 checkpoint 保存的 workflow state，`nodes/` 下拆分 collect、review、judge、feedback、modify、commit、push 等节点实现。
 - `schemas/`
   所有结构化输入输出定义，基于 `zod` 约束 review、modify、push 等数据结构。
 - `utils/`
@@ -171,19 +171,19 @@ pnpm dev:cli -- --repo /absolute/path/to/your-repo --limit 5
 启动一个带持久化的审查会话：
 
 ```bash
-pnpm dev:cli -- --session --repo /absolute/path/to/your-repo --limit 5
+pnpm dev:cli -- --session --repo /absolute/path/to/your-repo --limit 5 --checkpoint ./.ai-code-review/checkpoints.sqlite
 ```
 
 查看某个会话当前停在哪：
 
 ```bash
-pnpm dev:cli -- --status --thread <threadId>
+pnpm dev:cli -- --status --thread <threadId> --checkpoint ./.ai-code-review/checkpoints.sqlite
 ```
 
 恢复一个中断中的会话：
 
 ```bash
-pnpm dev:cli -- --resume --thread <threadId>
+pnpm dev:cli -- --resume --thread <threadId> --checkpoint ./.ai-code-review/checkpoints.sqlite
 ```
 
 可选参数：
@@ -193,7 +193,7 @@ pnpm dev:cli -- --resume --thread <threadId>
 
 补充说明：
 
-- 默认的一次性模式 `pnpm dev:cli -- --repo ...` 仍然可用，它会在当前进程内自动接管中断并继续执行。
+- 默认的一次性模式 `pnpm dev:cli -- --repo ...` 仍然可用，它会在当前进程内直接完成交互，不走持久化中断恢复。
 - `--session` 模式更适合长流程、跨终端恢复、或者后续接 Web/API 场景。
 - `--resume` 恢复时，需要使用和中断时相同的 `threadId` 与 checkpoint 文件路径。
 

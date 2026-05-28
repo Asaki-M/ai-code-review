@@ -26,7 +26,9 @@ export async function humanFeedback(state: ReviewWorkflowState) {
   }
 
   if (!feedback) {
-    feedback = interrupt(buildInterruptPayload('human_feedback', feedbackRequest)) as HumanFeedbackResponse
+    feedback = state.requestHumanFeedback
+      ? await state.requestHumanFeedback(feedbackRequest)
+      : interrupt(buildInterruptPayload('human_feedback', feedbackRequest)) as HumanFeedbackResponse
   }
 
   return {
@@ -60,7 +62,9 @@ export async function pushFeedback(state: ReviewWorkflowState) {
 
   return {
     pushFeedbackRequest,
-    pushFeedback: interrupt(buildInterruptPayload('push_feedback', pushFeedbackRequest)) as HumanFeedbackResponse,
+    pushFeedback: state.requestPushFeedback
+      ? await state.requestPushFeedback(pushFeedbackRequest)
+      : interrupt(buildInterruptPayload('push_feedback', pushFeedbackRequest)) as HumanFeedbackResponse,
   }
 }
 
